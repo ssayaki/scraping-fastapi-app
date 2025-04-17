@@ -49,7 +49,7 @@ async def handle_batch_request(payload: RequestPayload):
             try:
                 results = list(ddgs.text(query, region="jp-jp", max_results=2))
                 logging.info(f"[STEP 1] DuckDuckGo検索結果（{company_name}）:")
-                logging.info(json.dumps(results, ensure_ascii=False, indent=2))
+                logging.info(json.dumps(results, ensure_ascii=False, indent=1))
                 if results:
                     url = results[0].get("href", "")
                     snippet_text = results[0].get("body", "")
@@ -68,17 +68,17 @@ async def handle_batch_request(payload: RequestPayload):
                     soup = BeautifulSoup(html, "html.parser")
                     text = soup.get_text()
 
-                    logging.info(f"[STEP 2] HTML取得成功（{company_name}）: URL={url}")
-                    logging.info(f"[STEP 2] HTML内容（前1000文字）:\n{html[:1000]}")
-                    logging.info(f"[STEP 2] ページテキスト（前1000文字）:\n{text[:1000]}")
+                    # logging.info(f"[STEP 2] HTML取得成功（{company_name}）: URL={url}")
+                    # logging.info(f"[STEP 2] HTML内容（前1000文字）:\n{html[:1000]}")
+                    # logging.info(f"[STEP 2] ページテキスト（前1000文字）:\n{text[:1000]}")
 
                     # ⛔️ 強制終了（開発中用）
-                    return {
-                        "status": "中断",
-                        "message": "HTMLとテキストを確認するために終了しました。",
-                        "company": company_name,
-                        "url": url
-                    }
+                    # return {
+                    #     "status": "中断",
+                    #     "message": "HTMLとテキストを確認するために終了しました。",
+                    #     "company": company_name,
+                    #     "url": url
+                    # }
 
                     match = re.search(r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)", text)
                     if match:
