@@ -47,7 +47,9 @@ async def handle_batch_request(payload: RequestPayload):
             prefecture = ""
 
             try:
-                results = list(ddgs.text(query, region="jp-jp", max_results=1))
+                results = list(ddgs.text(query, region="jp-jp", max_results=2))
+                logging.info(f"[STEP 1] DuckDuckGo検索結果（{company_name}）:")
+                logging.info(json.dumps(results, ensure_ascii=False, indent=2))
                 if results:
                     url = results[0].get("href", "")
                     snippet_text = results[0].get("body", "")
@@ -59,13 +61,34 @@ async def handle_batch_request(payload: RequestPayload):
 
             try:
                 res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=7)
-                soup = BeautifulSoup(res.text, "html.parser")
-                text = soup.get_text()
-                match = re.search(r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)", text)
-                if match:
-                    prefecture = match.group(1)
+                
+                # アクセス成功時のみ処理続行（404などはスキップ）
+                if res.status_code == 200:
+                    html = res.text
+                    soup = BeautifulSoup(html, "html.parser")
+                    text = soup.get_text()
+
+                    logging.info(f"[STEP 2] HTML取得成功（{company_name}）: URL={url}")
+                    logging.info(f"[STEP 2] HTML内容（前1000文字）:\n{html[:1000]}")
+                    logging.info(f"[STEP 2] ページテキスト（前1000文字）:\n{text[:1000]}")
+
+                    # ⛔️ 強制終了（開発中用）
+                    return {
+                        "status": "中断",
+                        "message": "HTMLとテキストを確認するために終了しました。",
+                        "company": company_name,
+                        "url": url
+                    }
+
+                    match = re.search(r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)", text)
+                    if match:
+                        prefecture = match.group(1)
+                else:
+                    logging.warning(f"[STEP 2] URLアクセス失敗（ステータス: {res.status_code}）: {url}")
+
             except Exception as e:
-                logging.warning(f"[STEP 2] URL取得失敗、スニペットから検索: {e}")
+                logging.warning(f"[STEP 2] URL取得エラー: {e} ({url})")
+
                 match = re.search(r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)", snippet_text)
                 if match:
                     prefecture = match.group(1)
