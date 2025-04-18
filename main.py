@@ -47,9 +47,17 @@ pref_pattern = r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
 def extract_industry_and_prefecture(text):
     keyword_hits = []
     matched_keywords = []
+
     for name, keywords in industry_keywords.items():
         for kw in keywords:
             if kw in text:
+                # 金融ワードだけ、文脈チェックで除外する
+                if name == "金融業、保険業":
+                    # 「取引先」「振込先」などの直後に金融ワードがある場合はスキップ
+                    pattern = r"(取引先|取引銀行|振込先|協力|融資先|口座).*?" + re.escape(kw)
+                    if re.search(pattern, text):
+                        continue  # 誤判定の可能性があるため無視する
+
                 keyword_hits.append(name)
                 matched_keywords.append(kw)
 
@@ -67,6 +75,7 @@ def extract_industry_and_prefecture(text):
             prefecture = match.group(1)
 
     return industry, prefecture, matched_keywords
+
 
 class CompanyItem(BaseModel):
     company_name: str
@@ -90,7 +99,7 @@ async def handle_batch_request(payload: RequestPayload):
             company_name = item.company_name
             phone_number = item.phone_number
             email = item.email
-            query = f"{company_name} {phone_number} {email}".strip()
+            query = f"{company_name} {phone_number}".strip()
 
             url, snippet_text, text, info = "", "", "", ""
 
@@ -139,25 +148,25 @@ async def handle_batch_request(payload: RequestPayload):
                 "_text_excerpt": dify_context
             })
 
-    # dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
+    dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
 
-    # if dify_targets:
-    #     dify_payload = {
-    #         "inputs": {
-    #             "industry_texts": payload.industry_texts,
-    #             "info_list": json.dumps([
-    #                 {"company_name": item["company_name"], "info": item["_text_excerpt"]}
-    #                 for item in dify_targets
-    #             ], ensure_ascii=False)
-    #         },
-    #         "response_mode": "blocking",
-    #         "user": "company-fetcher"
-    #     }
+    if dify_targets:
+        dify_payload = {
+            "inputs": {
+                "industry_texts": payload.industry_texts,
+                "info_list": json.dumps([
+                    {"company_name": item["company_name"], "info": item["_text_excerpt"]}
+                    for item in dify_targets
+                ], ensure_ascii=False)
+            },
+            "response_mode": "blocking",
+            "user": "company-fetcher"
+        }
 
-    #     headers = {
-    #         "Authorization": f"Bearer {DIFY_API_KEY}",
-    #         "Content-Type": "application/json"
-    #     }
+        headers = {
+            "Authorization": f"Bearer {DIFY_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
         # try:
         #     dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
