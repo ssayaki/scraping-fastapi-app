@@ -139,25 +139,25 @@ async def handle_batch_request(payload: RequestPayload):
                 "_text_excerpt": dify_context
             })
 
-    dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
+    # dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
 
-    if dify_targets:
-        dify_payload = {
-            "inputs": {
-                "industry_texts": payload.industry_texts,
-                "info_list": json.dumps([
-                    {"company_name": item["company_name"], "info": item["_text_excerpt"]}
-                    for item in dify_targets
-                ], ensure_ascii=False)
-            },
-            "response_mode": "blocking",
-            "user": "company-fetcher"
-        }
+    # if dify_targets:
+    #     dify_payload = {
+    #         "inputs": {
+    #             "industry_texts": payload.industry_texts,
+    #             "info_list": json.dumps([
+    #                 {"company_name": item["company_name"], "info": item["_text_excerpt"]}
+    #                 for item in dify_targets
+    #             ], ensure_ascii=False)
+    #         },
+    #         "response_mode": "blocking",
+    #         "user": "company-fetcher"
+    #     }
 
-        headers = {
-            "Authorization": f"Bearer {DIFY_API_KEY}",
-            "Content-Type": "application/json"
-        }
+    #     headers = {
+    #         "Authorization": f"Bearer {DIFY_API_KEY}",
+    #         "Content-Type": "application/json"
+    #     }
 
         # try:
         #     dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
