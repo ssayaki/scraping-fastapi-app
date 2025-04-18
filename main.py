@@ -9,6 +9,7 @@ import logging
 import os
 import json
 from collections import Counter
+import time
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -97,6 +98,8 @@ async def handle_batch_request(payload: RequestPayload):
                     info = snippet_text
             except Exception as e:
                 logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {e}")
+
+            time.sleep(1)  # 1秒スリープ
 
             industry, prefecture = extract_industry_and_prefecture(info)
 
