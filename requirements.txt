@@ -3,3 +3,6 @@ uvicorn
 duckduckgo-search
 beautifulsoup4
 requests
+selenium
+pydantic
+undetected-chromedriver
