@@ -56,7 +56,7 @@ def extract_industry_and_prefecture(text):
         industry = Counter(keyword_hits).most_common(1)[0][0]
 
     prefecture = ""
-    match = re.search(r"(本社|所在地|住所|事業所|〒)?[^。・\n\r]{0,20}?" + pref_pattern, text)
+    match = re.search(r"(本社所在地|本社|所在地|住所|事業所|〒)?[^。・\n\r]{0,20}?" + pref_pattern, text)
     if match:
         prefecture = match.group(2 if match.lastindex == 2 else 1)
     else:
@@ -99,9 +99,9 @@ async def handle_batch_request(payload: RequestPayload):
                     snippet_text = results[0].get("body", "")
                     info = snippet_text
             except Exception as e:
-                logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {e}")
+                logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {company_name}: {e}")
 
-            time.sleep(random.uniform(1, 3))  # 1〜3秒ランダム待機
+            time.sleep(random.uniform(2, 3))  # 2〜3秒ランダム待機
 
             industry, prefecture = extract_industry_and_prefecture(info)
 
@@ -114,7 +114,7 @@ async def handle_batch_request(payload: RequestPayload):
                         text = soup.get_text()
                         industry, prefecture = extract_industry_and_prefecture(text)
                 except Exception as e:
-                    logging.warning(f"[STEP 2] URL取得エラー: {e} ({url})")
+                    logging.warning(f"[STEP 2] URL取得エラー: {company_name}:　{e} ({url})")
 
             target_text = text if text else info
             dify_context = ""
@@ -136,7 +136,7 @@ async def handle_batch_request(payload: RequestPayload):
                 "_text_excerpt": dify_context  # 内部用
             })
 
-            logging.info(f"info: {dify_context}")
+            logging.info(f"dify_context: {dify_context}")
 
     dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
 
