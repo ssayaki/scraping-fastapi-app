@@ -131,6 +131,8 @@ async def handle_batch_request(payload: RequestPayload):
                 "_text_excerpt": dify_context  # 内部用
             })
 
+            logging.info(f"info: {dify_context}")
+
     dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
 
     if dify_targets:
