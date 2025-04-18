@@ -107,7 +107,7 @@ async def handle_batch_request(payload: RequestPayload):
 
             if industry == "分類不能の産業" or prefecture == "":
                 try:
-                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}, timeout=5)
                     res.encoding = res.apparent_encoding
                     if res.status_code == 200:
                         soup = BeautifulSoup(res.text, "html.parser")
