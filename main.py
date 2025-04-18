@@ -136,8 +136,6 @@ async def handle_batch_request(payload: RequestPayload):
                 "_text_excerpt": dify_context  # 内部用
             })
 
-            logging.info(f"dify_context: {dify_context}")
-
     dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
 
     if dify_targets:
@@ -152,28 +150,29 @@ async def handle_batch_request(payload: RequestPayload):
             "response_mode": "blocking",
             "user": "company-fetcher"
         }
+        logging.info(f"[DIFY PAYLOAD]: {json.dumps(dify_payload, ensure_ascii=False, indent=2)}")
 
         headers = {
             "Authorization": f"Bearer {DIFY_API_KEY}",
             "Content-Type": "application/json"
         }
 
-        try:
-            dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
-            dify_response.raise_for_status()
-            dify_result = dify_response.json()
-            logging.info(f"[DIFY RAW RESPONSE]: {json.dumps(dify_result, ensure_ascii=False)}")
-            results_str = dify_result.get("data", {}).get("outputs", {}).get("results", "[]")
-            predictions = json.loads(results_str)
-            logging.info(f"[DIFY PARSED PREDICTIONS]: {predictions}")
-        except Exception as e:
-            logging.error(f"[DIFY ERROR] 呼び出し or 結果のパースに失敗: {e}")
-            predictions = []
+        # try:
+        #     dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
+        #     dify_response.raise_for_status()
+        #     dify_result = dify_response.json()
+        #     logging.info(f"[DIFY RAW RESPONSE]: {json.dumps(dify_result, ensure_ascii=False)}")
+        #     results_str = dify_result.get("data", {}).get("outputs", {}).get("results", "[]")
+        #     predictions = json.loads(results_str)
+        #     logging.info(f"[DIFY PARSED PREDICTIONS]: {predictions}")
+        # except Exception as e:
+        #     logging.error(f"[DIFY ERROR] 呼び出し or 結果のパースに失敗: {e}")
+        #     predictions = []
 
-        for item in enriched_items:
-            if item["industry"] == "分類不能の産業":
-                matched = next((p["industry"] for p in predictions if p["company_name"] == item["company_name"]), "")
-                item["industry"] = matched
-                item.pop("_text_excerpt", None)
+        # for item in enriched_items:
+        #     if item["industry"] == "分類不能の産業":
+        #         matched = next((p["industry"] for p in predictions if p["company_name"] == item["company_name"]), "")
+        #         item["industry"] = matched
+        #         item.pop("_text_excerpt", None)
 
     return enriched_items
