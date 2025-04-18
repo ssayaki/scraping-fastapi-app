@@ -10,6 +10,8 @@ import os
 import json
 from collections import Counter
 import time
+import random
+
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -99,7 +101,7 @@ async def handle_batch_request(payload: RequestPayload):
             except Exception as e:
                 logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {e}")
 
-            time.sleep(1)  # 1秒スリープ
+            time.sleep(random.uniform(1, 3))  # 1〜3秒ランダム待機
 
             industry, prefecture = extract_industry_and_prefecture(info)
 
