@@ -46,10 +46,12 @@ pref_pattern = r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
 
 def extract_industry_and_prefecture(text):
     keyword_hits = []
+    matched_keywords = []
     for name, keywords in industry_keywords.items():
         for kw in keywords:
             if kw in text:
                 keyword_hits.append(name)
+                matched_keywords.append(kw)
 
     industry = "分類不能の産業"
     if keyword_hits:
@@ -64,7 +66,7 @@ def extract_industry_and_prefecture(text):
         if match:
             prefecture = match.group(1)
 
-    return industry, prefecture
+    return industry, prefecture, matched_keywords
 
 class CompanyItem(BaseModel):
     company_name: str
@@ -101,31 +103,31 @@ async def handle_batch_request(payload: RequestPayload):
             except Exception as e:
                 logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {company_name}: {e}")
 
-            time.sleep(random.uniform(2, 3))  # 2〜3秒ランダム待機
+            time.sleep(random.uniform(2, 3))
 
-            industry, prefecture = extract_industry_and_prefecture(info)
+            industry, prefecture, matched_keywords = extract_industry_and_prefecture(info)
 
             if industry == "分類不能の産業" or prefecture == "":
                 try:
-                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}, timeout=(10, 30))
+                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 30))
                     res.encoding = res.apparent_encoding
                     if res.status_code == 200:
                         soup = BeautifulSoup(res.text, "html.parser")
                         text = soup.get_text()
-                        industry, prefecture = extract_industry_and_prefecture(text)
+                        industry, prefecture, matched_keywords = extract_industry_and_prefecture(text)
                 except Exception as e:
-                    logging.warning(f"[STEP 2] URL取得エラー: {company_name}:　{e} ({url})")
+                    logging.warning(f"[STEP 2] URL取得エラー: {company_name}: {e} ({url})")
 
             target_text = text if text else info
             dify_context = ""
             if industry == "分類不能の産業":
-                match = re.search(r"(業務内容|事業内容|サービス|施工.*?)[^\n]{0,100}", target_text)
+                match = re.search(r"(業務内容|事業内容|サービス|施工.*?|事業|提供|届ける|ために)[^\n]{0,100}", target_text)
                 if match:
                     start = max(0, match.start() - 100)
-                    end = min(len(target_text), match.end() + 200)
+                    end = min(len(target_text), match.end() + 300)
                     dify_context = target_text[start:end].strip()
                 else:
-                    dify_context = target_text[:300].strip()
+                    dify_context = target_text[:500].strip()
 
             enriched_items.append({
                 "company_name": company_name,
@@ -133,7 +135,8 @@ async def handle_batch_request(payload: RequestPayload):
                 "url": url,
                 "industry": industry,
                 "prefecture": prefecture,
-                "_text_excerpt": dify_context  # 内部用
+                "keywords": matched_keywords,
+                "_text_excerpt": dify_context
             })
 
     dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
@@ -150,7 +153,6 @@ async def handle_batch_request(payload: RequestPayload):
             "response_mode": "blocking",
             "user": "company-fetcher"
         }
-        logging.info(f"[DIFY PAYLOAD]: {json.dumps(dify_payload, ensure_ascii=False, indent=2)}")
 
         headers = {
             "Authorization": f"Bearer {DIFY_API_KEY}",
@@ -161,7 +163,6 @@ async def handle_batch_request(payload: RequestPayload):
         #     dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
         #     dify_response.raise_for_status()
         #     dify_result = dify_response.json()
-        #     logging.info(f"[DIFY RAW RESPONSE]: {json.dumps(dify_result, ensure_ascii=False)}")
         #     results_str = dify_result.get("data", {}).get("outputs", {}).get("results", "[]")
         #     predictions = json.loads(results_str)
         #     logging.info(f"[DIFY PARSED PREDICTIONS]: {predictions}")
