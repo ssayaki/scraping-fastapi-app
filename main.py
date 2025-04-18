@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
 from typing import List
+import requests
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 import re
@@ -10,8 +11,7 @@ import json
 from collections import Counter
 import time
 import random
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -83,12 +83,6 @@ def root():
 async def handle_batch_request(payload: RequestPayload):
     enriched_items = []
 
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(options=chrome_options)
-
     with DDGS() as ddgs:
         for item in payload.items:
             company_name = item.company_name
@@ -107,18 +101,18 @@ async def handle_batch_request(payload: RequestPayload):
             except Exception as e:
                 logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {company_name}: {e}")
 
-            time.sleep(random.uniform(2, 3))
+            time.sleep(random.uniform(2, 3))  # 2〜3秒ランダム待機
 
             industry, prefecture = extract_industry_and_prefecture(info)
 
             if industry == "分類不能の産業" or prefecture == "":
                 try:
-                    driver.get(url)
-                    time.sleep(5)  # JSレンダリング待機
-                    html = driver.page_source
-                    soup = BeautifulSoup(html, "html.parser")
-                    text = soup.get_text()
-                    industry, prefecture = extract_industry_and_prefecture(text)
+                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}, timeout=(10, 30))
+                    res.encoding = res.apparent_encoding
+                    if res.status_code == 200:
+                        soup = BeautifulSoup(res.text, "html.parser")
+                        text = soup.get_text()
+                        industry, prefecture = extract_industry_and_prefecture(text)
                 except Exception as e:
                     logging.warning(f"[STEP 2] URL取得エラー: {company_name}:　{e} ({url})")
 
@@ -139,9 +133,46 @@ async def handle_batch_request(payload: RequestPayload):
                 "url": url,
                 "industry": industry,
                 "prefecture": prefecture,
-                "_text_excerpt": dify_context
+                "_text_excerpt": dify_context  # 内部用
             })
 
-    driver.quit()
+    dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
+
+    if dify_targets:
+        dify_payload = {
+            "inputs": {
+                "industry_texts": payload.industry_texts,
+                "info_list": json.dumps([
+                    {"company_name": item["company_name"], "info": item["_text_excerpt"]}
+                    for item in dify_targets
+                ], ensure_ascii=False)
+            },
+            "response_mode": "blocking",
+            "user": "company-fetcher"
+        }
+        logging.info(f"[DIFY PAYLOAD]: {json.dumps(dify_payload, ensure_ascii=False, indent=2)}")
+
+        headers = {
+            "Authorization": f"Bearer {DIFY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # try:
+        #     dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
+        #     dify_response.raise_for_status()
+        #     dify_result = dify_response.json()
+        #     logging.info(f"[DIFY RAW RESPONSE]: {json.dumps(dify_result, ensure_ascii=False)}")
+        #     results_str = dify_result.get("data", {}).get("outputs", {}).get("results", "[]")
+        #     predictions = json.loads(results_str)
+        #     logging.info(f"[DIFY PARSED PREDICTIONS]: {predictions}")
+        # except Exception as e:
+        #     logging.error(f"[DIFY ERROR] 呼び出し or 結果のパースに失敗: {e}")
+        #     predictions = []
+
+        # for item in enriched_items:
+        #     if item["industry"] == "分類不能の産業":
+        #         matched = next((p["industry"] for p in predictions if p["company_name"] == item["company_name"]), "")
+        #         item["industry"] = matched
+        #         item.pop("_text_excerpt", None)
 
     return enriched_items
