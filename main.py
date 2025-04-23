@@ -81,8 +81,7 @@ def extract_industry_and_prefecture(text):
         if match:
             prefecture = match.group(1)
 
-
-    return industry, prefecture, matched_keywords, certainty
+    return industry, prefecture, list(matched_keywords), certainty
 
 class CompanyItem(BaseModel):
     company_name: str
