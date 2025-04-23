@@ -16,8 +16,8 @@ import random
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 
-DIFY_API_URL = "https://api.dify.ai/v1/workflows/run"
-DIFY_API_KEY = os.getenv("DIFY_API_KEY")
+# DIFY_API_URL = "https://api.dify.ai/v1/workflows/run"
+# DIFY_API_KEY = os.getenv("DIFY_API_KEY")
 
 # 業種分類用の簡易キーワードルール（19業種のみ）
 industry_keywords = {
@@ -44,7 +44,7 @@ industry_keywords = {
 
 pref_pattern = r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
 
-def extract_industry_and_prefecture(text):
+def extract_industry(text):
     keyword_hits = []
     matched_keywords = []
 
@@ -70,6 +70,10 @@ def extract_industry_and_prefecture(text):
         if len(candidates) == 1 and max_count >= 2:
             certainty = "確定"
 
+    matched_keywords = list(set(matched_keywords))
+    return industry, matched_keywords, certainty
+
+def extract_prefecture(text):
     prefecture = ""
     match = re.search(r"(本社所在地|本社|所在地|住所|事業所|〒)?[^。・\n\r]{0,20}?" + pref_pattern, text)
     # 最初に「住所」や「〒」の直後に都道府県が出てくるものを優先
@@ -80,8 +84,8 @@ def extract_industry_and_prefecture(text):
         match = re.search(pref_pattern, text)
         if match:
             prefecture = match.group(1)
+    return prefecture
 
-    return industry, prefecture, list(matched_keywords), certainty
 
 class CompanyItem(BaseModel):
     company_name: str
@@ -123,17 +127,21 @@ async def handle_batch_request(payload: RequestPayload):
 
             time.sleep(random.uniform(2, 3))
 
-            # 業種と都道府県が抽出できなかった場合、ページ内容から抽出
-            industry, prefecture, matched_keywords, certainty = extract_industry_and_prefecture(info)
-            # 業種と都道府県が抽出できなかった場合、ページ内容から抽出
-            if certainty != "確定":
+            # 業種と都道府県が抽出できなかった場合、snippetから抽出
+            industry, matched_keywords, certainty = extract_industry(info)
+            prefecture = extract_prefecture(info)
+            # 業種が未確定 or 都道府県が抽出できなかった場合、ページ内容から抽出
+            if certainty != "確定" or prefecture == "":
                 try:
                     res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(5, 15))
                     res.encoding = res.apparent_encoding
                     if res.status_code == 200:
                         soup = BeautifulSoup(res.text, "html.parser")
                         text = soup.get_text()
-                        industry, prefecture, matched_keywords, certainty = extract_industry_and_prefecture(text)
+                        if certainty != "確定":
+                            industry, matched_keywords, certainty = extract_industry(text)
+                        if prefecture == "":
+                            prefecture = extract_prefecture(text)
                     else:
                         log_messages.append(f"URL取得失敗（ステータスコード: {res.status_code}）")
                 except Exception as e:
