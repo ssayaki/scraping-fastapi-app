@@ -158,6 +158,8 @@ async def handle_batch_request(payload: RequestPayload):
                 "industry": industry,
                 "prefecture": prefecture,
                 "keywords": matched_keywords,
+                "info": info,
+                "text": text,
                 "_text_excerpt": dify_context,
                 "log": log_messages
             })
