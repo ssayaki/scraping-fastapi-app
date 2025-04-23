@@ -123,16 +123,16 @@ async def handle_batch_request(payload: RequestPayload):
             # 業種と都道府県が抽出できなかった場合、ページ内容から抽出
             if industry == "分類不能の産業" or prefecture == "":
                 try:
-                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 30))
+                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(5, 15))
                     res.encoding = res.apparent_encoding
                     if res.status_code == 200:
                         soup = BeautifulSoup(res.text, "html.parser")
                         text = soup.get_text()
                         industry, prefecture, matched_keywords = extract_industry_and_prefecture(text)
                     else:
-                        log_messages.append(f"アクセス不可: 手動で検索してください")
+                        log_messages.append(f"URL取得失敗（ステータスコード: {res.status_code}）")
                 except Exception as e:
-                    log_messages.append(f"アクセスに失敗: {e}")
+                    log_messages.append(f"URL取得エラー: {e} ({url})")
 
             if industry == "分類不能の産業":
                 log_messages.append("業種分類不能")
