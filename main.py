@@ -99,9 +99,10 @@ async def handle_batch_request(payload: RequestPayload):
             company_name = item.company_name
             phone_number = item.phone_number
             email = item.email
-            query = f"{company_name} {phone_number}".strip()
+            query = f"{company_name} {phone_number} {email}".strip()
 
             url, snippet_text, text, info = "", "", "", ""
+            log_messages = []
 
             try:
                 results = list(ddgs.text(query, region="jp-jp", max_results=1))
@@ -109,13 +110,17 @@ async def handle_batch_request(payload: RequestPayload):
                     url = results[0].get("href", "")
                     snippet_text = results[0].get("body", "")
                     info = snippet_text
+                else:
+                    log_messages.append("DuckDuckGo検索結果なし")
             except Exception as e:
-                logging.warning(f"[STEP 1] DuckDuckGo検索失敗: {company_name}: {e}")
+                log_messages.append(f"DuckDuckGo検索失敗: {e}")
 
             time.sleep(random.uniform(2, 3))
 
+            # まずはスニペットから業種と都道府県を抽出
             industry, prefecture, matched_keywords = extract_industry_and_prefecture(info)
 
+            # 業種と都道府県が抽出できなかった場合、ページ内容から抽出
             if industry == "分類不能の産業" or prefecture == "":
                 try:
                     res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 30))
@@ -124,9 +129,17 @@ async def handle_batch_request(payload: RequestPayload):
                         soup = BeautifulSoup(res.text, "html.parser")
                         text = soup.get_text()
                         industry, prefecture, matched_keywords = extract_industry_and_prefecture(text)
+                    else:
+                        log_messages.append(f"アクセス不可: 手動で検索してください")
                 except Exception as e:
-                    logging.warning(f"[STEP 2] URL取得エラー: {company_name}: {e} ({url})")
+                    log_messages.append(f"アクセスに失敗: {e}")
 
+            if industry == "分類不能の産業":
+                log_messages.append("業種分類不能")
+            if prefecture == "":
+                log_messages.append("都道府県抽出失敗")
+
+            # 業種判定に役立つ文言の前後を抽出
             target_text = text if text else info
             dify_context = ""
             if industry == "分類不能の産業":
@@ -145,44 +158,8 @@ async def handle_batch_request(payload: RequestPayload):
                 "industry": industry,
                 "prefecture": prefecture,
                 "keywords": matched_keywords,
-                "_text_excerpt": dify_context
+                "_text_excerpt": dify_context,
+                "log": log_messages
             })
-
-    dify_targets = [item for item in enriched_items if item["industry"] == "分類不能の産業"]
-
-    if dify_targets:
-        dify_payload = {
-            "inputs": {
-                "industry_texts": payload.industry_texts,
-                "info_list": json.dumps([
-                    {"company_name": item["company_name"], "info": item["_text_excerpt"]}
-                    for item in dify_targets
-                ], ensure_ascii=False)
-            },
-            "response_mode": "blocking",
-            "user": "company-fetcher"
-        }
-
-        headers = {
-            "Authorization": f"Bearer {DIFY_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        # try:
-        #     dify_response = requests.post(DIFY_API_URL, headers=headers, json=dify_payload)
-        #     dify_response.raise_for_status()
-        #     dify_result = dify_response.json()
-        #     results_str = dify_result.get("data", {}).get("outputs", {}).get("results", "[]")
-        #     predictions = json.loads(results_str)
-        #     logging.info(f"[DIFY PARSED PREDICTIONS]: {predictions}")
-        # except Exception as e:
-        #     logging.error(f"[DIFY ERROR] 呼び出し or 結果のパースに失敗: {e}")
-        #     predictions = []
-
-        # for item in enriched_items:
-        #     if item["industry"] == "分類不能の産業":
-        #         matched = next((p["industry"] for p in predictions if p["company_name"] == item["company_name"]), "")
-        #         item["industry"] = matched
-        #         item.pop("_text_excerpt", None)
 
     return enriched_items
