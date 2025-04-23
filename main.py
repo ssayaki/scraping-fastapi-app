@@ -61,7 +61,7 @@ def extract_industry(text):
                 matched_keywords.append(kw)
 
     industry = "分類不能の産業"
-    certainty = "要確認"
+    certainty = ""
     if keyword_hits:
         count = Counter(keyword_hits)
         max_count = max(count.values())
