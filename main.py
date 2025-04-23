@@ -56,26 +56,33 @@ def extract_industry_and_prefecture(text):
                     # 「取引先」「振込先」などの直後に金融ワードがある場合はスキップ
                     pattern = r"(取引先|取引銀行|振込先|協力|融資先|口座).*?" + re.escape(kw)
                     if re.search(pattern, text):
-                        continue  # 誤判定の可能性があるため無視する
-
+                        continue # 誤判定の可能性があるため無視する
                 keyword_hits.append(name)
                 matched_keywords.append(kw)
 
     industry = "分類不能の産業"
+    certainty = "要確認"
     if keyword_hits:
-        industry = Counter(keyword_hits).most_common(1)[0][0]
+        count = Counter(keyword_hits)
+        max_count = max(count.values())
+        candidates = [k for k, v in count.items() if v == max_count]
+        industry = ", ".join(candidates)
+        if len(candidates) == 1 and max_count >= 2:
+            certainty = "確定"
 
     prefecture = ""
     match = re.search(r"(本社所在地|本社|所在地|住所|事業所|〒)?[^。・\n\r]{0,20}?" + pref_pattern, text)
+    # 最初に「住所」や「〒」の直後に都道府県が出てくるものを優先
     if match:
-        prefecture = match.group(2 if match.lastindex == 2 else 1)
+        prefecture = re.search(pref_pattern, match.group()).group(1)
     else:
+        # fallback
         match = re.search(pref_pattern, text)
         if match:
             prefecture = match.group(1)
 
-    return industry, prefecture, matched_keywords
 
+    return industry, prefecture, matched_keywords, certainty
 
 class CompanyItem(BaseModel):
     company_name: str
@@ -117,18 +124,17 @@ async def handle_batch_request(payload: RequestPayload):
 
             time.sleep(random.uniform(2, 3))
 
-            # まずはスニペットから業種と都道府県を抽出
-            industry, prefecture, matched_keywords = extract_industry_and_prefecture(info)
-
             # 業種と都道府県が抽出できなかった場合、ページ内容から抽出
-            if industry == "分類不能の産業" or prefecture == "":
+            industry, prefecture, matched_keywords, certainty = extract_industry_and_prefecture(info)
+            # 業種と都道府県が抽出できなかった場合、ページ内容から抽出
+            if certainty != "確定":
                 try:
                     res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(5, 15))
                     res.encoding = res.apparent_encoding
                     if res.status_code == 200:
                         soup = BeautifulSoup(res.text, "html.parser")
                         text = soup.get_text()
-                        industry, prefecture, matched_keywords = extract_industry_and_prefecture(text)
+                        industry, prefecture, matched_keywords, certainty = extract_industry_and_prefecture(text)
                     else:
                         log_messages.append(f"URL取得失敗（ステータスコード: {res.status_code}）")
                 except Exception as e:
@@ -142,7 +148,7 @@ async def handle_batch_request(payload: RequestPayload):
             # 業種判定に役立つ文言の前後を抽出
             target_text = text if text else info
             dify_context = ""
-            if industry == "分類不能の産業":
+            if certainty != "確定":
                 match = re.search(r"(業務内容|事業内容|サービス|施工.*?|事業|提供|届ける|ために)[^\n]{0,100}", target_text)
                 if match:
                     start = max(0, match.start() - 100)
@@ -158,6 +164,7 @@ async def handle_batch_request(payload: RequestPayload):
                 "industry": industry,
                 "prefecture": prefecture,
                 "keywords": matched_keywords,
+                "certainty": certainty,
                 "info": info,
                 "text": text,
                 "_text_excerpt": dify_context,
