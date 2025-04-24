@@ -132,7 +132,7 @@ async def handle_batch_request(payload: RequestPayload):
             # 業種が未確定 or 都道府県が抽出できなかった場合、ページ内容から抽出
             if certainty != "確定" or prefecture == "":
                 try:
-                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(5, 15))
+                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(5, 10))
                     res.encoding = res.apparent_encoding
                     if res.status_code == 200:
                         soup = BeautifulSoup(res.text, "html.parser")
