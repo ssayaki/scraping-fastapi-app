@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
 import requests
@@ -7,8 +7,7 @@ from bs4 import BeautifulSoup
 import re
 import logging
 import os
-import json
-from collections import Counter
+from collections import Counter, defaultdict
 import time
 import random
 
@@ -46,7 +45,7 @@ pref_pattern = r"(東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
 
 def extract_industry(text):
     keyword_hits = []
-    matched_keywords = []
+    keyword_map = defaultdict(set)
 
     for name, keywords in industry_keywords.items():
         for kw in keywords:
@@ -58,7 +57,7 @@ def extract_industry(text):
                     if re.search(pattern, text):
                         continue # 誤判定の可能性があるため無視する
                 keyword_hits.append(name)
-                matched_keywords.append(kw)
+                keyword_map[name].add(kw)
 
     industry = "分類不能の産業"
     certainty = ""
@@ -70,8 +69,8 @@ def extract_industry(text):
         if len(candidates) == 1 and max_count >= 2:
             certainty = "確定"
 
-    matched_keywords = list(set(matched_keywords))
-    return industry, matched_keywords, certainty
+    keyword_map = {k: list(v) for k, v in keyword_map.items()}
+    return industry, keyword_map, certainty
 
 def extract_prefecture(text):
     prefecture = ""
@@ -128,7 +127,7 @@ async def handle_batch_request(payload: RequestPayload):
             time.sleep(random.uniform(2, 3))
 
             # 業種と都道府県が抽出できなかった場合、snippetから抽出
-            industry, matched_keywords, certainty = extract_industry(info)
+            industry, keyword_map, certainty = extract_industry(info)
             prefecture = extract_prefecture(info)
             # 業種が未確定 or 都道府県が抽出できなかった場合、ページ内容から抽出
             if certainty != "確定" or prefecture == "":
@@ -139,7 +138,7 @@ async def handle_batch_request(payload: RequestPayload):
                         soup = BeautifulSoup(res.text, "html.parser")
                         text = soup.get_text()
                         if certainty != "確定":
-                            industry, matched_keywords, certainty = extract_industry(text)
+                            industry, keyword_map, certainty = extract_industry(text)
                         if prefecture == "":
                             prefecture = extract_prefecture(text)
                     else:
@@ -170,10 +169,8 @@ async def handle_batch_request(payload: RequestPayload):
                 "url": url,
                 "industry": industry,
                 "prefecture": prefecture,
-                "keywords": matched_keywords,
+                "keywords": keyword_map,
                 "certainty": certainty,
-                "info": info,
-                "text": text,
                 "_text_excerpt": dify_context,
                 "log": log_messages
             })
